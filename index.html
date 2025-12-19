@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生日倒计时</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.6.12/lunar.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f7f9fc; padding: 20px; max-width: 600px; margin: 0 auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .days-left { font-size: 1.5rem; font-weight: bold; color: #e74c3c; }
+        .name { font-size: 1.1rem; font-weight: 600; }
+        .date-info { font-size: 0.85rem; color: #666; margin-top: 4px; }
+        .tag { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        .tag.solar { background: #e3f2fd; color: #1976d2; }
+        .tag.lunar { background: #f3e5f5; color: #7b1fa2; }
+        .add-box { background: #fff; padding: 20px; border-radius: 12px; margin-top: 30px; }
+        input, select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        button { background: #333; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 10px; }
+        button:hover { background: #000; }
+        .del-btn { color: #999; cursor: pointer; font-size: 0.8rem; margin-left: 10px;}
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h2>🎉 生日倒计时</h2>
+        
+        <div v-if="loading">加载中...</div>
+
+        <div v-for="(item, index) in sortedList" :key="index" class="card">
+            <div>
+                <div class="name">
+                    {{ item.name }}
+                    <span :class="['tag', item.type === 'solar' ? 'solar' : 'lunar']">
+                        {{ item.type === 'solar' ? '阳历' : '农历' }}
+                    </span>
+                </div>
+                <div class="date-info">
+                    原日期: {{ item.date }} | 下次: {{ item.nextDateStr }}
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div class="days-left">{{ item.days }} 天</div>
+                <span class="del-btn" @click="removeItem(index)">删除</span>
+            </div>
+        </div>
+
+        <div class="add-box">
+            <h3>📝 录入新生日</h3>
+            <input v-model="newItem.name" placeholder="姓名">
+            <select v-model="newItem.type">
+                <option value="solar">阳历 (公历)</option>
+                <option value="lunar">农历 (阴历)</option>
+            </select>
+            <input type="text" v-model="newItem.date" placeholder="格式: 10-01 (月-日) 或 1995-10-01">
+            <button @click="addItem">保存</button>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const list = ref([]);
+                const loading = ref(true);
+                const newItem = ref({ name: '', type: 'solar', date: '' });
+
+                // 计算倒计时逻辑
+                const calculateDays = (item) => {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const currentYear = today.getFullYear();
+                    
+                    let targetDate;
+                    
+                    // 解析输入的 月-日
+                    let [m, d] = item.date.includes('-') 
+                        ? item.date.split('-').slice(-2).map(Number) 
+                        : [0, 0];
+
+                    if (item.type === 'solar') {
+                        // --- 阳历逻辑 ---
+                        targetDate = new Date(currentYear, m - 1, d);
+                        if (targetDate < today) {
+                            targetDate.setFullYear(currentYear + 1);
+                        }
+                    } else {
+                        // --- 农历逻辑 (核心) ---
+                        // 获取今年的农历对应的公历日期
+                        // Lunar.fromYmd(年, 月, 日)
+                        let lunarDate = Lunar.fromYmd(currentYear, m, d);
+                        let solarFromLunar = lunarDate.getSolar();
+                        targetDate = new Date(solarFromLunar.getYear(), solarFromLunar.getMonth() - 1, solarFromLunar.getDay());
+
+                        // 如果今年的农历生日已经过了，计算明年的
+                        if (targetDate < today) {
+                            lunarDate = Lunar.fromYmd(currentYear + 1, m, d);
+                            solarFromLunar = lunarDate.getSolar();
+                            targetDate = new Date(solarFromLunar.getYear(), solarFromLunar.getMonth() - 1, solarFromLunar.getDay());
+                        }
+                    }
+
+                    const diffTime = Math.abs(targetDate - today);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    
+                    return {
+                        ...item,
+                        days: diffDays,
+                        nextDateStr: targetDate.toISOString().split('T')[0]
+                    };
+                };
+
+                // 获取排序后的列表
+                const sortedList = computed(() => {
+                    return list.value.map(calculateDays).sort((a, b) => a.days - b.days);
+                });
+
+                // API 操作
+                const fetchData = async () => {
+                    const res = await fetch('/api/data');
+                    list.value = await res.json();
+                    loading.value = false;
+                };
+
+                const addItem = async () => {
+                    if(!newItem.value.name || !newItem.value.date) return alert("请填写完整");
+                    list.value.push({ ...newItem.value });
+                    await fetch('/api/data', {
+                        method: 'POST',
+                        body: JSON.stringify(list.value)
+                    });
+                    newItem.value = { name: '', type: 'solar', date: '' };
+                };
+
+                const removeItem = async (index) => {
+                    // 由于 sortedList 改变了顺序，我们需要找到原数组中的对应项删除
+                    // 这里为了简化演示，直接在前端UI移除后全量保存。
+                    // 实际应用中建议给每个item加个 ID。
+                    const itemToRemove = sortedList.value[index];
+                    const realIndex = list.value.findIndex(i => i.name === itemToRemove.name && i.date === itemToRemove.date);
+                    
+                    if(confirm('确定删除吗？')) {
+                        list.value.splice(realIndex, 1);
+                        await fetch('/api/data', {
+                            method: 'POST',
+                            body: JSON.stringify(list.value)
+                        });
+                    }
+                };
+
+                onMounted(fetchData);
+
+                return { list, sortedList, newItem, addItem, removeItem, loading };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
