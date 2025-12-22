@@ -3,38 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>生日倒计时</title>
+    <title>那可是我的至爱亲朋啊</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.6.12/lunar.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     
     <style>
-        /* --- 1. CSS 变量定义主题 --- */
+        /* --- 全局变量定义 --- */
         :root {
+            /* 浅色模式默认值 */
             --bg-color: #f0f2f5;
             --text-main: #333;
             --text-sub: #666;
             --card-bg: #ffffff;
             --card-shadow: 0 4px 20px rgba(0,0,0,0.05);
-            --accent-color: #4facfe; /* 倒计时数字颜色 */
+            --accent-color: #4facfe;
             --btn-bg: #333;
             --btn-text: #fff;
             --input-bg: #fff;
             --border-color: #eee;
+            --del-btn-bg: rgba(255, 71, 87, 0.1);
+            --del-btn-text: #ff4757;
         }
 
-        /* 深色模式变量 */
-        [data-theme="dark"] {
+        /* 深色模式重写变量 - 这里的关键是 html[data-theme="dark"] */
+        html[data-theme="dark"] {
             --bg-color: #121212;
             --text-main: #e0e0e0;
             --text-sub: #a0a0a0;
             --card-bg: #1e1e1e;
-            --card-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            --card-shadow: 0 4px 20px rgba(0,0,0,0.5);
             --accent-color: #ff7e5f;
             --btn-bg: #4facfe;
             --btn-text: #fff;
             --input-bg: #2c2c2c;
             --border-color: #333;
+            --del-btn-bg: rgba(255, 71, 87, 0.2);
+            --del-btn-text: #ff6b81;
         }
 
         body {
@@ -43,18 +48,25 @@
             color: var(--text-main);
             margin: 0;
             padding: 20px;
+            padding-bottom: 180px; /* 底部留白，防止内容被添加框挡住 */
             min-height: 100vh;
             transition: background 0.3s, color 0.3s;
+            box-sizing: border-box;
         }
 
-        .container { max-width: 600px; margin: 0 auto; padding-bottom: 40px; }
+        .container { max-width: 600px; margin: 0 auto; }
 
-        /* --- 顶部导航栏 --- */
+        /* --- 顶部导航 --- */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 24px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--bg-color); /* 只有这里需要背景色防止滚动穿透 */
+            padding: 10px 0;
         }
         .header h2 { margin: 0; font-size: 1.5rem; }
         .controls { display: flex; gap: 10px; }
@@ -62,20 +74,16 @@
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             color: var(--text-main);
-            width: 40px;
-            height: 40px;
+            width: 40px; height: 40px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             cursor: pointer;
             transition: all 0.3s;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
-        .icon-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         .icon-btn.active { background: var(--accent-color); color: #fff; border-color: var(--accent-color); }
 
-        /* --- 卡片样式 --- */
+        /* --- 卡片列表 --- */
         .card {
             background: var(--card-bg);
             border-radius: 16px;
@@ -85,131 +93,106 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: transform 0.2s, background 0.3s;
+            transition: transform 0.2s;
             position: relative;
-            overflow: hidden;
         }
-        .card:hover { transform: translateY(-2px); }
+        /* 编辑模式下卡片轻微抖动效果（可选，增加趣味性） */
+        /* .editing .card { animation: shake 0.5s; } */
 
-        /* 左侧信息 */
         .info-group { display: flex; flex-direction: column; gap: 4px; }
         .name-row { display: flex; align-items: center; gap: 8px; }
-        .name { font-size: 1.2rem; font-weight: 700; color: var(--text-main); }
-        .badges { display: flex; gap: 4px; }
-        .tag {
-            font-size: 0.75rem; padding: 2px 6px; border-radius: 6px;
-            font-weight: 500;
-        }
+        .name { font-size: 1.2rem; font-weight: 700; }
+        .tag { font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; font-weight: 500; }
         .tag.solar { background: rgba(25, 118, 210, 0.1); color: #1976d2; }
         .tag.lunar { background: rgba(123, 31, 162, 0.1); color: #7b1fa2; }
         .tag.age { background: rgba(255, 152, 0, 0.1); color: #f57c00; }
         
-        /* 日期详情 */
-        .date-detail { font-size: 0.85rem; color: var(--text-sub); margin-top: 4px; display: flex; align-items: center; gap: 5px; }
-        .date-detail i { font-size: 0.9rem; }
+        .date-detail { font-size: 0.85rem; color: var(--text-sub); display: flex; align-items: center; gap: 5px; }
+        
+        .countdown-group { text-align: right; min-width: 60px; }
+        .days-num { font-size: 1.8rem; font-weight: 800; color: var(--accent-color); line-height: 1; }
+        .days-label { font-size: 0.75rem; color: var(--text-sub); }
+        .today-badge { color: #ff3b30; font-weight: bold; animation: pulse 1.5s infinite; }
 
-        /* 右侧倒计时 */
-        .countdown-group { text-align: right; }
-        .days-num { 
-            font-size: 2rem; 
-            font-weight: 800; 
-            color: var(--accent-color); 
-            line-height: 1;
-        }
-        .days-label { font-size: 0.8rem; color: var(--text-sub); }
-        .today-badge { 
-            color: #ff3b30; font-weight: bold; font-size: 1.2rem; 
-            animation: pulse 1.5s infinite;
-        }
-
-        /* --- 编辑模式下的删除按钮 --- */
+        /* --- 删除按钮 (绝对定位在卡片内) --- */
         .delete-btn {
             position: absolute;
-            top: 10px; right: 10px;
-            color: #ff4757;
-            background: rgba(255, 71, 87, 0.1);
-            width: 28px; height: 28px;
+            top: -10px; 
+            right: -10px;
+            background: #ff4757;
+            color: white;
+            width: 30px; height: 30px;
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer;
-            font-size: 1rem;
+            box-shadow: 0 2px 8px rgba(255, 71, 87, 0.4);
+            z-index: 5; /* 确保层级高 */
+            transform: scale(0);
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
+        /* 当处于编辑模式时，显示删除按钮 */
+        .editing .delete-btn { transform: scale(1); }
 
-        /* --- 底部添加框 (仅编辑模式显示) --- */
+        /* --- 底部添加框 --- */
         .add-panel {
             background: var(--card-bg);
             padding: 24px;
-            border-radius: 16px 16px 0 0;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -4px 30px rgba(0,0,0,0.15);
             position: fixed;
             bottom: 0; left: 0; right: 0;
             max-width: 600px;
             margin: 0 auto;
-            transform: translateY(100%);
+            transform: translateY(120%); /* 默认隐藏 */
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 100;
         }
         .add-panel.show { transform: translateY(0); }
-        .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        
+        .form-row { display: flex; gap: 10px; margin-bottom: 12px; }
         input, select {
             padding: 12px;
             border: 1px solid var(--border-color);
             background: var(--input-bg);
             color: var(--text-main);
-            border-radius: 8px;
+            border-radius: 10px;
             flex: 1;
             outline: none;
+            font-size: 1rem;
         }
         button.save-btn {
-            width: 100%;
-            padding: 14px;
-            background: var(--btn-bg);
-            color: var(--btn-text);
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
+            width: 100%; padding: 14px;
+            background: var(--btn-bg); color: var(--btn-text);
+            border: none; border-radius: 10px;
+            font-weight: bold; cursor: pointer; font-size: 1rem;
         }
-
-        /* 遮罩层 */
-        .overlay {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 99;
-            display: none;
-        }
-        .overlay.show { display: block; }
+        button.save-btn:active { opacity: 0.9; transform: scale(0.98); }
 
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         [v-cloak] { display: none; }
     </style>
 </head>
 <body>
-    <div id="app" class="container" v-cloak :data-theme="theme">
+    <div id="app" class="container" v-cloak :class="{ editing: isEditMode }">
         
         <div class="header">
             <h2>🎂 生日倒计时</h2>
             <div class="controls">
-                <div class="icon-btn" @click="toggleTheme" title="切换主题">
+                <div class="icon-btn" @click="toggleTheme">
                     <i :class="theme === 'light' ? 'ri-sun-line' : 'ri-moon-line'"></i>
                 </div>
-                <div class="icon-btn" :class="{ active: isEditMode }" @click="toggleEditMode" title="管理/编辑">
-                    <i :class="isEditMode ? 'ri-settings-4-fill' : 'ri-settings-4-line'"></i>
+                <div class="icon-btn" :class="{ active: isEditMode }" @click="toggleEditMode">
+                    <i :class="isEditMode ? 'ri-close-line' : 'ri-settings-4-line'"></i>
                 </div>
             </div>
         </div>
 
-        <div v-if="loading" style="text-align:center; color: var(--text-sub);">加载中...</div>
-
-        <div v-if="!loading && list.length === 0" style="text-align:center; margin-top: 50px; color: var(--text-sub);">
-            <i class="ri-cake-3-line" style="font-size: 3rem; opacity: 0.5;"></i>
-            <p>还没有添加生日哦，点击右上角齿轮添加</p>
-        </div>
+        <div v-if="loading" style="text-align:center; margin-top:50px;">加载中...</div>
 
         <div class="list">
             <div v-for="(item, index) in sortedList" :key="index" class="card">
-                <div v-if="isEditMode" class="delete-btn" @click.stop="removeItem(item)">
-                    <i class="ri-close-line"></i>
+                <div class="delete-btn" @click.stop="removeItem(item)">
+                    <i class="ri-delete-bin-line"></i>
                 </div>
 
                 <div class="info-group">
@@ -221,18 +204,12 @@
                         </div>
                     </div>
                     <div class="date-detail">
-                        <i class="ri-calendar-event-line"></i> 
-                        <span>{{ item.nextDateStr }} ({{ getWeekDay(item.nextDateStr) }})</span>
-                    </div>
-                    <div class="date-detail" style="font-size: 0.75rem; opacity: 0.8;">
-                        <i class="ri-history-line"></i> 原: {{ item.date }}
+                        <i class="ri-calendar-line"></i> {{ item.nextDateStr }} ({{ getWeekDay(item.nextDateStr) }})
                     </div>
                 </div>
 
                 <div class="countdown-group">
-                    <div v-if="item.days === 0" class="today-badge">
-                        <i class="ri-cake-2-fill"></i> 今天
-                    </div>
+                    <div v-if="item.days === 0" class="today-badge">今天</div>
                     <div v-else>
                         <div class="days-num">{{ item.days }}</div>
                         <div class="days-label">天后</div>
@@ -241,13 +218,16 @@
             </div>
         </div>
 
-        <div class="overlay" :class="{ show: isEditMode }" @click="toggleEditMode"></div>
+        <div v-if="!loading && list.length === 0" style="text-align:center; padding-top: 50px; opacity:0.6;">
+            <i class="ri-cake-3-line" style="font-size: 3rem;"></i>
+            <p>点击右上角添加生日</p>
+        </div>
 
         <div class="add-panel" :class="{ show: isEditMode }">
-            <h3 style="margin-top:0; margin-bottom: 15px;">新增生日</h3>
+            <h3 style="margin-top:0; margin-bottom: 15px;">📝 新增/管理</h3>
             <div class="form-row">
-                <input v-model="newItem.name" placeholder="姓名 (如: 老妈)" style="flex: 2;">
-                <select v-model="newItem.type" style="flex: 1;">
+                <input v-model="newItem.name" placeholder="姓名 (如: 妈妈)">
+                <select v-model="newItem.type" style="flex: 0 0 80px;">
                     <option value="solar">阳历</option>
                     <option value="lunar">农历</option>
                 </select>
@@ -255,7 +235,10 @@
             <div class="form-row">
                 <input type="text" v-model="newItem.date" placeholder="日期: 1995-10-01 或 10-01">
             </div>
-            <button class="save-btn" @click="addItem">保存并更新</button>
+            <button class="save-btn" @click="addItem">添加生日</button>
+            <div style="text-align:center; margin-top:10px; font-size:0.8rem; color:var(--text-sub)">
+                点击右上角 × 退出管理
+            </div>
         </div>
     </div>
 
@@ -266,34 +249,40 @@
             setup() {
                 const list = ref([]);
                 const loading = ref(true);
-                const isEditMode = ref(false); // 控制编辑模式状态
+                const isEditMode = ref(false); 
                 const newItem = ref({ name: '', type: 'solar', date: '' });
-                
-                // 主题控制
                 const theme = ref(localStorage.getItem('theme') || 'light');
+
+                // --- 修复1: 正确的主题切换逻辑 ---
+                const applyTheme = (val) => {
+                    document.documentElement.setAttribute('data-theme', val);
+                };
+                // 初始化执行
+                applyTheme(theme.value);
+                // 监听变化
+                watch(theme, (newVal) => {
+                    applyTheme(newVal);
+                    localStorage.setItem('theme', newVal);
+                });
+                
                 const toggleTheme = () => {
                     theme.value = theme.value === 'light' ? 'dark' : 'light';
-                    localStorage.setItem('theme', theme.value);
                 };
 
                 const toggleEditMode = () => {
                     isEditMode.value = !isEditMode.value;
                 };
 
-                // 获取星期几
                 const getWeekDay = (dateStr) => {
                     const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
                     return days[new Date(dateStr).getDay()];
                 };
 
-                // 核心计算逻辑
                 const calculateInfo = (item) => {
                     const today = new Date();
                     today.setHours(0,0,0,0);
                     const currentYear = today.getFullYear();
                     
-                    // 1. 解析原始输入
-                    // 支持 "1990-10-01" 或 "10-01"
                     let birthYear = null;
                     let m, d;
                     
@@ -307,7 +296,6 @@
                         d = parseInt(parts[1]);
                     }
 
-                    // 2. 计算下一个生日日期
                     let targetDate;
                     if (item.type === 'solar') {
                         targetDate = new Date(currentYear, m - 1, d);
@@ -315,9 +303,7 @@
                             targetDate.setFullYear(currentYear + 1);
                         }
                     } else {
-                        // 农历转公历
                         let lunarDate = Lunar.fromYmd(currentYear, m, d);
-                        // 处理闰月：如果录入的是闰月，Lunar库可能需要特殊处理，这里简化处理，默认为非闰月匹配
                         let solar = lunarDate.getSolar(); 
                         targetDate = new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay());
                         
@@ -328,51 +314,29 @@
                         }
                     }
 
-                    // 3. 计算倒计时天数
                     const diffTime = targetDate - today;
                     const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                    // 4. 计算年龄 (如果有出生年份)
                     let age = null;
                     if (birthYear) {
-                        // 如果生日还没过，年龄 = 当前年份 - 出生年份 - 1
-                        // 如果生日已过或就是今天，年龄 = 当前年份 - 出生年份
-                        // 这里我们计算"下一次生日时的年龄"可能更符合语境，或者"当前周岁"
-                        // 采用常规逻辑：当前实岁
-                        let ageDiff = currentYear - birthYear;
-                        // 这里稍微偷懒，粗略计算实岁，如果还没过生日就-1
-                        const thisYearBday = new Date(currentYear, m - 1, d); // 仅做参考
-                        if (today < thisYearBday) {
-                            // ageDiff--; 
-                            // 修正：通常人们看生日列表想知道"他今年几岁"或者"过完生日几岁"
-                            // 这里直接显示：过完下个生日是多少岁
-                            age = currentYear - birthYear;
-                            if (targetDate.getFullYear() > currentYear) {
-                                age = age + 1; // 如果下个生日是明年，那就是明年的岁数
-                            }
-                        } else {
-                             age = currentYear - birthYear;
-                             if (targetDate.getFullYear() > currentYear) {
-                                age = age + 1;
-                             }
+                        age = currentYear - birthYear;
+                        if (targetDate.getFullYear() > currentYear) {
+                            age = age + 1;
                         }
                     }
 
                     return {
                         ...item,
                         days,
-                        age, // 新增年龄字段
+                        age,
                         nextDateStr: targetDate.toISOString().split('T')[0]
                     };
                 };
 
                 const sortedList = computed(() => {
-                    return list.value
-                        .map(calculateInfo)
-                        .sort((a, b) => a.days - b.days);
+                    return list.value.map(calculateInfo).sort((a, b) => a.days - b.days);
                 });
 
-                // API 交互
                 const fetchData = async () => {
                     try {
                         const res = await fetch('/api/data');
@@ -391,20 +355,19 @@
 
                 const addItem = async () => {
                     if(!newItem.value.name || !newItem.value.date) return alert("请填写完整");
-                    // 简单的格式校验
                     if(!newItem.value.date.includes('-')) return alert("日期格式请使用 10-01 或 1990-10-01");
                     
                     list.value.push({ ...newItem.value });
                     await saveData();
                     newItem.value = { name: '', type: 'solar', date: '' };
-                    alert("添加成功！");
-                    // 不关闭编辑模式，方便继续添加
+                    // 不关闭编辑模式，方便连续添加
+                    // alert("已添加"); 
                 };
 
+                // --- 修复2: 移除遮罩层，直接删除 ---
                 const removeItem = async (itemToRemove) => {
                     if(!confirm(`确定要删除 ${itemToRemove.name} 吗？`)) return;
                     
-                    // 在原始 list 中找到并删除
                     const index = list.value.findIndex(i => i.name === itemToRemove.name && i.date === itemToRemove.date);
                     if (index > -1) {
                         list.value.splice(index, 1);
