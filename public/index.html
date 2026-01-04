@@ -290,11 +290,20 @@
                         targetDate = new Date(currentYear, m - 1, d);
                         if (targetDate < today) targetDate.setFullYear(currentYear + 1);
                     } else {
-                        let lunarDate = Lunar.fromYmd(currentYear, m, d);
-                        let solar = lunarDate.getSolar(); 
+                        // 1. 获取“今天”对应的农历年份 (例如 2026年1月，其实还是农历2025年)
+                        const todayLunar = Lunar.fromDate(today);
+                        const currentLunarYear = todayLunar.getYear();
+
+                        // 2. 尝试用“当前的农历年份”去匹配生日
+                        // 比如生日是 12-01，当前农历是 2025，那就计算 农历2025-12-01 对应的公历
+                        let lunarDate = Lunar.fromYmd(currentLunarYear, m, d);
+                        let solar = lunarDate.getSolar();
                         targetDate = new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay());
+
+                        // 3. 关键判断：如果算出来的这个日期已经过去了（比如生日是5月，现在是腊月）
+                        // 那么就计算“下一个农历年份”的生日
                         if (targetDate < today) {
-                            lunarDate = Lunar.fromYmd(currentYear + 1, m, d);
+                            lunarDate = Lunar.fromYmd(currentLunarYear + 1, m, d);
                             solar = lunarDate.getSolar();
                             targetDate = new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay());
                         }
